@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
-  CalendarDays, 
+  Calendar as CalendarIcon,
   Plus, 
   Phone, 
   Clock, 
@@ -29,55 +29,65 @@ import {
   MapPin,
   Target
 } from "lucide-react";
+import { CallData } from "@/types";
 
-// Mock data for scheduled calls
-const scheduledCalls = [
-  {
-    id: 1,
-    date: new Date(2024, 2, 15),
-    time: "09:00",
-    contact: "John Smith",
-    phone: "+1 (555) 123-4567",
-    type: "outbound",
-    purpose: "Follow-up",
-    status: "scheduled"
-  },
-  {
-    id: 2,
-    date: new Date(2024, 2, 15),
-    time: "14:30",
-    contact: "Sarah Johnson",
-    phone: "+1 (555) 987-6543",
-    type: "outbound", 
-    purpose: "Lead qualification",
-    status: "scheduled"
-  },
-  {
-    id: 3,
-    date: new Date(2024, 2, 18),
-    time: "11:15",
-    contact: "Mike Wilson",
-    phone: "+1 (555) 456-7890",
-    type: "callback",
-    purpose: "Product demo",
-    status: "confirmed"
+interface CallCalendarProps {
+  calls: CallData[];
+}
+
+// Helper function to safely create a date from a string
+const safeCreateDate = (dateString: string): Date | null => {
+  try {
+    const date = new Date(dateString);
+    // Check if the date is valid
+    return isNaN(date.getTime()) ? null : date;
+  } catch (e) {
+    console.error('Error creating date:', e);
+    return null;
   }
-];
+};
 
-export function CallCalendar() {
+// Helper function to get calls for a specific date
+const getCallsForDate = (date: Date, calls: CallData[]) => {
+  return calls.filter(call => {
+    const callDate = safeCreateDate(call.timestamp);
+    return callDate ? callDate.toDateString() === date.toDateString() : false;
+  });
+};
+
+const formatTime = (dateString: string) => {
+  const date = safeCreateDate(dateString);
+  return date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+};
+
+const formatDuration = (seconds: number): string => {
+  if (!seconds) return '0s';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
+export function CallCalendar({ calls = [] }: CallCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
 
-  const callsForSelectedDate = scheduledCalls.filter(call => 
-    selectedDate && 
-    call.date.toDateString() === selectedDate.toDateString()
-  );
+  // Get calls for the selected date
+  const callsForSelectedDate = selectedDate ? getCallsForDate(selectedDate, calls) : [];
 
-  const getCallTypeColor = (type: string) => {
-    switch (type) {
-      case 'outbound': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'callback': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'follow-up': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+  const hasCallsOnDate = (date: Date) => {
+    return calls.some(call => {
+      const callDate = safeCreateDate(call.timestamp);
+      return callDate ? callDate.toDateString() === date.toDateString() : false;
+    });
+  };
+
+  const getCallStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'in-progress': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'scheduled': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'missed': return 'bg-red-500/20 text-red-400 border-red-500/30';
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     }
   };
@@ -89,7 +99,7 @@ export function CallCalendar() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
-              <CalendarDays className="w-5 h-5 text-primary" />
+              <CalendarIcon className="w-5 h-5 text-primary" />
               <span>Call Schedule</span>
             </CardTitle>
             <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
@@ -158,7 +168,13 @@ export function CallCalendar() {
             mode="single"
             selected={selectedDate}
             onSelect={setSelectedDate}
-            className="rounded-md border border-border/50"
+            className="rounded-md border"
+            modifiers={{
+              hasCalls: (date) => hasCallsOnDate(date)
+            }}
+            modifiersClassNames={{
+              hasCalls: 'bg-blue-500/10 border-blue-500/30'
+            }}
           />
         </CardContent>
       </Card>
@@ -177,62 +193,44 @@ export function CallCalendar() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {callsForSelectedDate.length === 0 ? (
-            <div className="text-center py-8">
-              <CalendarDays className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No calls scheduled for this date</p>
-              <Button 
-                className="mt-4 bg-gradient-primary hover:opacity-90"
-                onClick={() => setIsScheduleDialogOpen(true)}
-              >
-                Schedule First Call
-              </Button>
-            </div>
-          ) : (
+          {callsForSelectedDate.length > 0 ? (
             <div className="space-y-4">
               {callsForSelectedDate.map((call) => (
-                <div 
-                  key={call.id}
-                  className="p-4 rounded-lg bg-gradient-hero border border-border/50 hover:shadow-card transition-all duration-200"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-primary-foreground" />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground">{call.contact}</h4>
-                          <p className="text-sm text-muted-foreground">{call.phone}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                        <div className="flex items-center space-x-1">
-                          <Clock className="w-4 h-4" />
-                          <span>{call.time}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Target className="w-4 h-4" />
-                          <span>{call.purpose}</span>
-                        </div>
-                      </div>
+                <div key={call.id} className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-medium">{call.from}</h3>
+                      <p className="text-sm text-muted-foreground">To: {call.to}</p>
                     </div>
-                    
-                    <div className="flex flex-col items-end space-y-2">
-                      <Badge className={getCallTypeColor(call.type)}>
-                        {call.type}
-                      </Badge>
-                      <Badge 
-                        variant={call.status === 'confirmed' ? 'default' : 'secondary'}
-                        className="text-xs"
-                      >
-                        {call.status}
-                      </Badge>
-                    </div>
+                    <Badge className={getCallStatusColor(call.status)}>
+                      {call.status}
+                    </Badge>
                   </div>
+                  
+                  <div className="mt-2 flex items-center text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4 mr-1" />
+                    <span>{formatTime(call.timestamp)}</span>
+                    {call.duration > 0 && (
+                      <span className="mx-2">•</span>
+                    )}
+                    {call.duration > 0 && (
+                      <span>Duration: {formatDuration(call.duration)}</span>
+                    )}
+                  </div>
+                  
+                  {call.transcript && (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {call.transcript}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No calls scheduled for this date</p>
             </div>
           )}
         </CardContent>

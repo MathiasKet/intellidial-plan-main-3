@@ -6,95 +6,76 @@ import {
   PhoneIncoming, 
   PhoneOutgoing, 
   Clock, 
-  User,
   Play,
   FileText
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { CallData } from "@/types";
 
-const recentCalls = [
-  {
-    id: 1,
-    contact: "Emma Thompson",
-    phone: "+1 (555) 234-5678",
-    type: "inbound",
-    duration: "5:42",
-    status: "completed",
-    timestamp: "2 minutes ago",
-    outcome: "Lead qualified",
-    transcriptId: "trans_001"
-  },
-  {
-    id: 2,
-    contact: "David Rodriguez",
-    phone: "+1 (555) 345-6789",
-    type: "outbound",
-    duration: "3:18",
-    status: "completed",
-    timestamp: "8 minutes ago",
-    outcome: "Follow-up scheduled",
-    transcriptId: "trans_002"
-  },
-  {
-    id: 3,
-    contact: "Lisa Chen",
-    phone: "+1 (555) 456-7890",
-    type: "inbound",
-    duration: "7:25",
-    status: "completed",
-    timestamp: "15 minutes ago",
-    outcome: "Demo booked",
-    transcriptId: "trans_003"
-  },
-  {
-    id: 4,
-    contact: "Robert Johnson",
-    phone: "+1 (555) 567-8901",
-    type: "outbound",
-    duration: "2:03",
-    status: "voicemail",
-    timestamp: "23 minutes ago",
-    outcome: "Left message",
-    transcriptId: null
-  },
-  {
-    id: 5,
-    contact: "Amanda Wilson",
-    phone: "+1 (555) 678-9012",
-    type: "inbound",
-    duration: "6:14",
-    status: "completed",
-    timestamp: "31 minutes ago",
-    outcome: "Information provided",
-    transcriptId: "trans_005"
+interface RecentCallsProps {
+  calls: CallData[];
+}
+
+// Helper function to safely create a date from a string
+const safeCreateDate = (dateString: string): Date | null => {
+  try {
+    const date = new Date(dateString);
+    // Check if the date is valid
+    return isNaN(date.getTime()) ? null : date;
+  } catch (e) {
+    console.error('Error creating date:', e);
+    return null;
   }
-];
+};
 
-export function RecentCalls() {
-  const navigate = useNavigate();
+const formatTimeAgo = (dateString: string) => {
+  const date = safeCreateDate(dateString);
+  if (!date) return '--';
   
-  const handleCallClick = (callId: number) => {
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  return `${Math.floor(diffInSeconds / 86400)}d ago`;
+};
+
+const formatDuration = (seconds: number): string => {
+  if (!seconds) return '0s';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
+export function RecentCalls({ calls = [] }: RecentCallsProps) {
+  const navigate = useNavigate();
+
+  const handleCallClick = (callId: string) => {
     // In a real app, you might want to check call status before navigating
     navigate(`/call/${callId}`);
-  };
-
-  const getCallIcon = (type: string) => {
-    return type === 'inbound' ? PhoneIncoming : PhoneOutgoing;
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'voicemail': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'in-progress': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'scheduled': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       case 'missed': return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'voicemail': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     }
   };
 
-  const getTypeColor = (type: string) => {
-    return type === 'inbound' 
-      ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      : 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+  const getCallType = (call: CallData) => {
+    // Determine if the call was inbound or outbound based on the from/to numbers
+    // This is a simple example - you might need to adjust based on your actual data
+    return call.from.startsWith('+1') ? 'outbound' : 'inbound';
+  };
+
+  const getCallIcon = (call: CallData) => {
+    return getCallType(call) === 'inbound' ? PhoneIncoming : PhoneOutgoing;
   };
 
   return (
@@ -104,79 +85,87 @@ export function RecentCalls() {
           <Phone className="w-5 h-5 text-primary" />
           <span>Recent Calls</span>
           <Badge variant="secondary" className="ml-auto">
-            {recentCalls.length} today
+            {calls.length} today
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {recentCalls.map((call) => {
-            const CallIcon = getCallIcon(call.type);
-            return (
-              <div 
-                key={call.id}
-                onClick={() => handleCallClick(call.id)}
-                className="p-4 rounded-lg bg-gradient-hero border border-border/50 hover:shadow-card transition-all duration-200 cursor-pointer hover:border-primary/50"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
-                      <CallIcon className="w-5 h-5 text-primary-foreground" />
+          {calls.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No recent calls found</p>
+            </div>
+          ) : (
+            calls.slice(0, 5).map((call) => {
+              const callType = getCallType(call);
+              const CallIcon = getCallIcon(call);
+              
+              return (
+                <div 
+                  key={call.id}
+                  onClick={() => handleCallClick(call.id)}
+                  className="p-4 rounded-lg bg-gradient-hero border border-border/50 hover:shadow-card transition-all duration-200 cursor-pointer hover:border-primary/50"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
+                        <CallIcon className="w-5 h-5 text-primary-foreground" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-foreground">{call.from}</h4>
+                        <p className="text-sm text-muted-foreground">To: {call.to}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-foreground">{call.contact}</h4>
-                      <p className="text-sm text-muted-foreground">{call.phone}</p>
+                    
+                    <div className="flex items-center space-x-2">
+                      {call.recordingUrl && (
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          className="hover:bg-accent/50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Handle play recording
+                            window.open(call.recordingUrl, '_blank');
+                          }}
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
-                    {call.transcriptId && (
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        className="hover:bg-accent/50"
-                      >
-                        <FileText className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button 
-                      size="sm" 
-                      variant="ghost"
-                      className="hover:bg-accent/50"
-                    >
-                      <Play className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center space-x-4 text-sm">
-                    <div className="flex items-center space-x-1 text-muted-foreground">
-                      <Clock className="w-4 h-4" />
-                      <span>{call.duration}</span>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center space-x-4 text-sm">
+                      <div className="flex items-center space-x-1 text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        <span>{formatDuration(call.duration || 0)}</span>
+                      </div>
+                      <span className="text-muted-foreground">•</span>
+                      <span className="text-muted-foreground">{formatTimeAgo(call.timestamp)}</span>
                     </div>
-                    <span className="text-muted-foreground">•</span>
-                    <span className="text-muted-foreground">{call.timestamp}</span>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Badge className={getStatusColor(call.status)}>
+                        {call.status}
+                      </Badge>
+                      <Badge variant="outline">
+                        {callType}
+                      </Badge>
+                    </div>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
-                    <Badge className={getTypeColor(call.type)}>
-                      {call.type}
-                    </Badge>
-                    <Badge className={getStatusColor(call.status)}>
-                      {call.status}
-                    </Badge>
-                  </div>
+                  {call.transcript && (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {call.transcript}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                
-                <div className="mt-2">
-                  <p className="text-sm text-foreground font-medium">
-                    Outcome: <span className="text-primary">{call.outcome}</span>
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </CardContent>
     </Card>

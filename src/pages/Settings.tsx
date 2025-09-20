@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,53 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Bell, User, Lock, Mail, Phone, Globe, Palette, Moon, Sun, Clock, MessageSquare, Headphones, Database, BellRing } from "lucide-react";
+import { Bell, User, Lock, Mail, Phone, Globe, Palette, Moon, Sun, Clock, MessageSquare, Headphones, Database, BellRing, Monitor } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { cn } from "@/lib/utils";
+
+interface ThemeOptionProps {
+  icon: React.ReactNode;
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+  previewTheme: 'light' | 'dark';
+}
+
+const ThemeOption = ({ icon, label, isActive, onClick, previewTheme }: ThemeOptionProps) => {
+  return (
+    <div 
+      className={cn(
+        "border rounded-lg p-4 cursor-pointer transition-colors flex flex-col h-full",
+        isActive 
+          ? "border-primary ring-2 ring-primary/20" 
+          : "hover:border-muted-foreground/30"
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-center space-x-2 mb-2">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className={cn(
+        "flex-1 rounded-md border shadow-sm mt-2 overflow-hidden",
+        previewTheme === 'dark' ? 'bg-neutral-900' : 'bg-white'
+      )}>
+        <div className="grid grid-cols-2 gap-1 p-1.5">
+          <div className={cn("h-2 rounded-sm", isActive ? 'bg-primary' : 'bg-blue-500')}></div>
+          <div className={cn("h-2 rounded-sm", previewTheme === 'dark' ? 'bg-neutral-700' : 'bg-muted')}></div>
+          <div className={cn("h-2 rounded-sm", previewTheme === 'dark' ? 'bg-neutral-700' : 'bg-muted')}></div>
+          <div className={cn("h-2 rounded-sm", previewTheme === 'dark' ? 'bg-neutral-700' : 'bg-muted')}></div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function Settings() {
-  const [theme, setTheme] = useState("system");
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [fontSize, setFontSize] = useState(16);
+  
   const [notifications, setNotifications] = useState({
     email: true,
     push: true,
@@ -19,11 +62,56 @@ export default function Settings() {
     marketing: false,
   });
 
+  // Only render the theme-dependent UI after mounting to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    
+    // Load saved font size from localStorage or use default
+    const savedFontSize = localStorage.getItem('fontSize');
+    if (savedFontSize) {
+      setFontSize(Number(savedFontSize));
+      document.documentElement.style.setProperty('--font-size', `${savedFontSize}px`);
+    } else {
+      document.documentElement.style.setProperty('--font-size', `${fontSize}px`);
+    }
+  }, []);
+
   const handleNotificationChange = (key: keyof typeof notifications) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+    const newNotifications = {
+      ...notifications,
+      [key]: !notifications[key]
+    };
+    setNotifications(newNotifications);
+    // Here you would typically save to your backend or local storage
+    localStorage.setItem('notifications', JSON.stringify(newNotifications));
+  };
+
+  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+    setTheme(newTheme);
+  };
+
+  const handleFontSizeChange = (value: number[]) => {
+    const newSize = value[0];
+    setFontSize(newSize);
+    document.documentElement.style.setProperty('--font-size', `${newSize}px`);
+    localStorage.setItem('fontSize', newSize.toString());
+  };
+
+  const resetToDefaults = () => {
+    setTheme('system');
+    setFontSize(16);
+    document.documentElement.style.setProperty('--font-size', '16px');
+    localStorage.removeItem('fontSize');
+    
+    // Reset notifications to default
+    const defaultNotifications = {
+      email: true,
+      push: true,
+      sound: true,
+      marketing: false,
+    };
+    setNotifications(defaultNotifications);
+    localStorage.setItem('notifications', JSON.stringify(defaultNotifications));
   };
 
   return (
@@ -224,101 +312,76 @@ export default function Settings() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>Theme</Label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div 
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${theme === 'light' ? 'border-primary' : 'hover:border-muted-foreground/30'}`}
-                    onClick={() => setTheme('light')}
-                  >
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Sun className="h-4 w-4" />
-                      <span>Light</span>
-                    </div>
-                    <div className="bg-white rounded-md border shadow-sm h-20 flex items-center justify-center">
-                      <div className="grid grid-cols-2 gap-1 p-1 w-3/4">
-                        <div className="bg-blue-500 h-3 rounded"></div>
-                        <div className="bg-muted h-3 rounded"></div>
-                        <div className="bg-muted h-3 rounded"></div>
-                        <div className="bg-muted h-3 rounded"></div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div 
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${theme === 'dark' ? 'border-primary' : 'hover:border-muted-foreground/30'}`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Moon className="h-4 w-4" />
-                      <span>Dark</span>
-                    </div>
-                    <div className="bg-neutral-900 rounded-md border shadow-sm h-20 flex items-center justify-center">
-                      <div className="grid grid-cols-2 gap-1 p-1 w-3/4">
-                        <div className="bg-blue-500 h-3 rounded"></div>
-                        <div className="bg-neutral-700 h-3 rounded"></div>
-                        <div className="bg-neutral-700 h-3 rounded"></div>
-                        <div className="bg-neutral-700 h-3 rounded"></div>
-                      </div>
+              {mounted && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Theme</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {theme === 'system' 
+                        ? `Using system theme (${resolvedTheme})` 
+                        : `Using ${theme} theme`}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                      <ThemeOption 
+                        icon={<Sun className="h-4 w-4" />} 
+                        label="Light" 
+                        isActive={theme === 'light'}
+                        onClick={() => handleThemeChange('light')}
+                        previewTheme="light"
+                      />
+                      
+                      <ThemeOption 
+                        icon={<Moon className="h-4 w-4" />} 
+                        label="Dark" 
+                        isActive={theme === 'dark'}
+                        onClick={() => handleThemeChange('dark')}
+                        previewTheme="dark"
+                      />
+                      
+                      <ThemeOption 
+                        icon={<Monitor className="h-4 w-4" />} 
+                        label="System" 
+                        isActive={theme === 'system'}
+                        onClick={() => handleThemeChange('system')}
+                        previewTheme={resolvedTheme}
+                      />
                     </div>
                   </div>
-                  
-                  <div 
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${theme === 'system' ? 'border-primary' : 'hover:border-muted-foreground/30'}`}
-                    onClick={() => setTheme('system')}
-                  >
-                    <div className="flex items-center space-x-2 mb-2">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="h-4 w-4"
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Font Size</Label>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-muted-foreground">A</span>
+                        <Slider 
+                          value={[fontSize]} 
+                          min={12} 
+                          max={20} 
+                          step={1}
+                          onValueChange={(value) => handleFontSizeChange(value)}
+                          className="flex-1"
+                        />
+                        <span className="text-sm text-muted-foreground">A</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center">
+                        {fontSize}px
+                      </p>
+                    </div>
+
+                    <div className="pt-2 flex justify-between items-center">
+                      <Button 
+                        variant="outline" 
+                        onClick={resetToDefaults}
                       >
-                        <rect width="20" height="14" x="2" y="3" rx="2" />
-                        <line x1="8" x2="16" y1="21" y2="21" />
-                        <line x1="12" x2="12" y1="17" y2="21" />
-                      </svg>
-                      <span>System</span>
-                    </div>
-                    <div className="relative h-20 overflow-hidden rounded-md border shadow-sm">
-                      <div className="absolute inset-0 bg-white dark:bg-neutral-900">
-                        <div className="grid grid-cols-2 gap-1 p-1 w-3/4 mx-auto mt-2">
-                          <div className="bg-blue-500 h-2 rounded"></div>
-                          <div className="bg-muted h-2 rounded dark:bg-neutral-700"></div>
-                          <div className="bg-muted h-2 rounded dark:bg-neutral-700"></div>
-                          <div className="bg-muted h-2 rounded dark:bg-neutral-700"></div>
-                        </div>
+                        Reset to Defaults
+                      </Button>
+                      <div className="text-xs text-muted-foreground">
+                        Changes are saved automatically
                       </div>
-                      <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/5 to-transparent dark:from-white/5"></div>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Font Size</Label>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-muted-foreground">A</span>
-                  <Slider 
-                    defaultValue={[16]} 
-                    min={12} 
-                    max={20} 
-                    step={1} 
-                    className="flex-1"
-                  />
-                  <span className="text-sm text-muted-foreground">A</span>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <Button>Save Appearance</Button>
-              </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
