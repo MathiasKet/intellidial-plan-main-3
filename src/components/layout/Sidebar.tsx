@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   Phone, 
@@ -20,13 +21,12 @@ const sidebarItems = [
   {
     title: "Dashboard",
     icon: LayoutDashboard,
-    href: "/",
-    active: true
+    href: "/"
   },
   {
     title: "Active Calls",
     icon: PhoneCall,
-    href: "/calls",
+    href: "/active-calls",
     badge: "3"
   },
   {
@@ -37,7 +37,7 @@ const sidebarItems = [
   {
     title: "Call History",
     icon: Phone,
-    href: "/history"
+    href: "/call-history"
   },
   {
     title: "Transcripts",
@@ -57,7 +57,7 @@ const sidebarItems = [
   {
     title: "Data Sync",
     icon: Database,
-    href: "/sync"
+    href: "/data-sync"
   },
   {
     title: "Settings",
@@ -72,6 +72,17 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activePath, setActivePath] = useState(location.pathname);
+
+  useEffect(() => {
+    setActivePath(location.pathname);
+  }, [location]);
+
+  const handleNavigation = (path: string) => {
+    navigate(path);
+  };
 
   return (
     <div className={cn(
@@ -105,31 +116,37 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-2">
-          {sidebarItems.map((item) => (
-            <Button
-              key={item.href}
-              variant={item.active ? "default" : "ghost"}
-              className={cn(
-                "w-full justify-start h-10 transition-all duration-200",
-                collapsed ? "px-2" : "px-3",
-                item.active 
-                  ? "bg-gradient-primary text-primary-foreground shadow-elegant" 
-                  : "hover:bg-accent/50 text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <item.icon className={cn("w-4 h-4", collapsed ? "" : "mr-3")} />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 text-left">{item.title}</span>
-                  {item.badge && (
-                    <span className="ml-auto bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </>
-              )}
-            </Button>
-          ))}
+          {sidebarItems.map((item) => {
+            const isActive = activePath === item.href || 
+                           (item.href !== '/' && activePath.startsWith(item.href));
+                           
+            return (
+              <Button
+                key={item.href}
+                variant={isActive ? "default" : "ghost"}
+                className={cn(
+                  "w-full justify-start h-10 transition-all duration-200",
+                  collapsed ? "px-2" : "px-3",
+                  isActive 
+                    ? "bg-gradient-primary text-primary-foreground shadow-elegant" 
+                    : "hover:bg-accent/50 text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => handleNavigation(item.href)}
+              >
+                <item.icon className={cn("w-4 h-4", collapsed ? "" : "mr-3")} />
+                {!collapsed && (
+                  <>
+                    <span className="flex-1 text-left">{item.title}</span>
+                    {item.badge && (
+                      <span className="ml-auto bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </>
+                )}
+              </Button>
+            );
+          })}
         </nav>
       </ScrollArea>
 
