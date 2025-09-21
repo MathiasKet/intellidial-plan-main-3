@@ -1,45 +1,59 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toastSuccess, toastInfo } from '@/lib/toast';
-
-type SubscriptionTier = 'demo' | 'basic' | 'pro' | 'enterprise';
+import { toast } from '@/components/ui/use-toast';
+import { authApi } from '@/services/api';
 
 interface User {
   id: string;
   email: string;
   name: string;
-  subscription: SubscriptionTier;
-  isDemo: boolean;
-  image?: string;
+  phone?: string;
+  role: 'admin' | 'agent' | 'user';
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
+  last_login_at?: string;
+  is_active: boolean;
+}
+
+interface AuthResponse {
+  user: User;
+  accessToken: string;
+  refreshToken: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: Error | null;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-  upgradeSubscription: (tier: SubscriptionTier) => void;
-  hasAccess: (requiredTier: SubscriptionTier) => boolean;
   isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (userData: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+  }) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshToken: () => Promise<boolean>;
+  updateUser: (userData: Partial<User>) => void;
+  hasRole: (roles: string[]) => boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 // Custom error class for auth-related errors
 export class AuthError extends Error {
   constructor(message: string, public code?: string) {
     super(message);
     this.name = 'AuthError';
-    // Maintains proper stack trace for where our error was thrown
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, AuthError);
     }
   }
 }
 
-const getUserFromStorage = (): User | null => {
+const getStoredUser = (): User | null => {
   if (typeof window === 'undefined') return null;
   
   try {
@@ -47,7 +61,7 @@ const getUserFromStorage = (): User | null => {
     if (!userData) return null;
     
     const parsedUser = JSON.parse(userData);
-    if (!parsedUser || !parsedUser.id || !parsedUser.email || !parsedUser.subscription) {
+    if (!parsedUser || !parsedUser.id || !parsedUser.email) {
       console.error('Invalid user data in storage');
       return null;
     }
@@ -60,221 +74,180 @@ const getUserFromStorage = (): User | null => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(getStoredUser());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const navigate = useNavigate();
   
   // Initialize auth state
-  useEffect(() => {
-    let isMounted = true;
-    
-    const initializeAuth = async () => {
-      if (!isMounted) return;
-      
-      try {
-        const storedUser = getUserFromStorage();
-        if (storedUser) {
-          setUser(storedUser);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        setError(error instanceof Error ? error : new Error('Failed to initialize authentication'));
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-    
-    initializeAuth();
-    
-    return () => {
-      isMounted = false;
-    };
+  // Check if user is authenticated
+  const isAuthenticated = !!user?.id;
+
+  // Update user data in state and local storage
+  const updateUser = useCallback((userData: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updatedUser = { ...prev, ...userData };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      return updatedUser;
+    });
   }, []);
 
+  // Login function
   const login = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     
     try {
-      toastInfo('Signing in...', 'Please wait while we authenticate your account');
+      const { user, accessToken, refreshToken } = await authApi.login(email, password);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Hardcoded admin credentials for demo purposes
-      const ADMIN_CREDENTIALS = {
-        email: 'admin@intellidial.com',
-        password: 'admin123'  // In a real app, never store passwords in code
-      };
-      
-      // Check for admin credentials
-      const isAdminLogin = email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password;
-      
-      // Check for admin email pattern
-      const isAdminEmail = isAdminLogin || email.endsWith('@admin.com') || email === 'admin@example.com';
-      
-      // For demo purposes, we'll create a user on the fly
-      const user: User = isAdminEmail 
-        ? {
-            id: 'admin-user-123',
-            email: isAdminLogin ? ADMIN_CREDENTIALS.email : email,
-            name: 'Admin User',
-            subscription: 'enterprise',
-            isDemo: false,
-          }
-        : {
-            id: 'demo-user-123',
-            email: email,
-            name: 'Demo User',
-            subscription: 'demo',
-            isDemo: true,
-          };
-      
-      console.log('User logged in:', {
-        ...user,
-        password: '***' // Never log actual passwords
-      });
-      
+      // Store tokens and user data
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
+      
       setUser(user);
       
-      if (isAdminEmail) {
-        console.log('Admin user logged in with full access');
-        // Mark onboarding as completed for admin
-        localStorage.setItem('onboardingCompleted', 'true');
-      }
-      
-      setLoading(false);
-      toastSuccess('Welcome back!', 'You have successfully logged in');
-      navigate('/');
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
-      setError(new Error(errorMessage));
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signup = async (name: string, email: string, password: string) => {
-    try {
-      setLoading(true);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Check for admin email pattern (e.g., admin@example.com or *@admin.com)
-      const isAdminEmail = email.endsWith('@admin.com') || email === 'admin@example.com';
-      
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        email,
-        name,
-        // If admin, give highest subscription level, otherwise use demo
-        subscription: isAdminEmail ? 'enterprise' : 'demo',
-        isDemo: !isAdminEmail // Admin accounts are not in demo mode
-      };
-      
-      console.log('New user created:', {
-        ...newUser,
-        password: '***' // Never log actual passwords
+      toast({
+        title: 'Login successful',
+        description: `Welcome back, ${user.name}!`,
       });
       
-      localStorage.setItem('user', JSON.stringify(newUser));
-      setUser(newUser);
+      navigate('/dashboard');
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
       
-      if (isAdminEmail) {
-        console.log('Admin user created with full access');
-        // Mark onboarding as completed for admin
-        localStorage.setItem('onboardingCompleted', 'true');
-      }
+      toast({
+        title: 'Login failed',
+        description: error.message || 'Failed to log in. Please try again.',
+        variant: 'destructive',
+      });
       
-      navigate('/');
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Signup failed';
-      console.error('Signup error:', errorMessage);
-      setError(new Error(errorMessage));
       throw error;
     } finally {
       setLoading(false);
     }
   };
-
-  const logout = () => {
-    localStorage.removeItem('user');
-    setUser(null);
+  
+  // Register function
+  const register = async (userData: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+  }) => {
+    setLoading(true);
     setError(null);
-    setLoading(false);
-    toastSuccess('Logged out successfully');
-    navigate('/login');
-  };
-
-  const upgradeSubscription = (tier: SubscriptionTier) => {
-    if (!user) return;
     
-    const updatedUser = {
-      ...user,
-      subscription: tier,
-      isDemo: tier === 'demo'
-    };
-    
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-    setUser(updatedUser);
+    try {
+      const { user, accessToken, refreshToken } = await authApi.register(userData);
+      
+      // Store tokens and user data
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      setUser(user);
+      
+      toast({
+        title: 'Registration successful',
+        description: 'Your account has been created!',
+      });
+      
+      navigate('/onboarding');
+    } catch (err) {
+      const error = err as Error;
+      setError(error);
+      
+      toast({
+        title: 'Registration failed',
+        description: error.message || 'Failed to register. Please try again.',
+        variant: 'destructive',
+      });
+      
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const hasAccess = (requiredTier: SubscriptionTier) => {
+  
+  // Logout function
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      // Clear all auth data
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      
+      setUser(null);
+      setError(null);
+      
+      navigate('/login');
+    }
+  };
+  
+  // Refresh access token
+  const refreshToken = async (): Promise<boolean> => {
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+      
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+      
+      // The token refresh is handled by the API interceptor
+      // This function is just for manual refresh if needed
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/refresh-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to refresh token');
+      }
+      
+      const { accessToken, refreshToken: newRefreshToken } = await response.json();
+      
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', newRefreshToken);
+      
+      return true;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      await logout();
+      return false;
+    }
+  };
+  
+  // Check if user has required role
+  const hasRole = (roles: string[]): boolean => {
     if (!user) return false;
-    
-    const tierOrder: Record<SubscriptionTier, number> = {
-      'demo': 0,
-      'basic': 1,
-      'pro': 2,
-      'enterprise': 3
-    };
-    
-    return tierOrder[user.subscription] >= tierOrder[requiredTier];
+    return roles.includes(user.role);
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="bg-destructive/10 border border-destructive rounded-lg p-6 max-w-md w-full text-center">
-          <h2 className="text-xl font-bold text-destructive mb-2">Authentication Error</h2>
-          <p className="text-muted-foreground mb-4">
-            {error.message || 'An error occurred during authentication'}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors"
-          >
-            Reload Page
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const value = {
+    user,
+    loading,
+    error,
+    isAuthenticated,
+    login,
+    register,
+    logout,
+    refreshToken,
+    updateUser,
+    hasRole,
+  };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      error,
-      login,
-      signup,
-      logout,
-      upgradeSubscription,
-      hasAccess,
-      isAuthenticated: !!user
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -282,11 +255,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new AuthError(
-      'useAuth must be used within an AuthProvider',
-      'AUTH_CONTEXT_ERROR'
-    );
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };

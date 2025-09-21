@@ -1,0 +1,179 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Using string literals instead of enums for SQLite compatibility
+// enum UserRole {
+//   ADMIN
+//   AGENT
+//   USER
+// }
+
+// enum CallStatus {
+//   INITIATED
+//   IN_PROGRESS
+//   COMPLETED
+//   FAILED
+//   MISSED
+//   NO_ANSWER
+//   BUSY
+// }
+
+// enum AppointmentStatus {
+//   SCHEDULED
+//   COMPLETED
+//   CANCELLED
+//   RESCHEDULED
+//   NO_SHOW
+// }
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  phone         String?        @unique
+  passwordHash  String
+  role          String         @default("USER") // Using string literal instead of enum
+  isActive      Boolean        @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  // Relations
+  calls         Call[]
+  appointments  Appointment[]
+  crmLogs       CRMLog[]
+  callLogs      CallLog[]
+  refreshTokens RefreshToken[]
+  
+  @@map("users")
+}
+
+model Call {
+  id            String         @id @default(uuid())
+  userId        String
+  status        String         @default("INITIATED") // Using string literal instead of enum
+  fromNumber    String
+  toNumber      String
+  callSid       String?       @unique
+  recordingUrl  String?
+  startTime     DateTime      @default(now())
+  endTime       DateTime?
+  duration      Int?          // in seconds
+  startedAt     DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  user          User          @relation(fields: [userId], references: [id])
+  transcript    Transcript?   @relation("CallToTranscript")
+  callLogs      CallLog[]
+  crmLogs       CRMLog[]
+  
+  @@map("calls")
+}
+
+model Transcript {
+  id              String    @id @default(uuid())
+  callId          String    @unique
+  rawText         String    // Removed @db.Text for SQLite
+  processedText   String?   // Removed @db.Text for SQLite
+  sentiment       String?
+  sentimentScore  Float?
+  keyPoints       String?   // Stored as JSON string
+  summary         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  call            Call      @relation("CallToTranscript", fields: [callId], references: [id])
+  
+  @@map("transcripts")
+}
+
+model CallLog {
+  id        String   @id @default(uuid())
+  callId    String
+  userId    String
+  action    String
+  details   String?  // Stored as JSON string
+  createdAt DateTime @default(now())
+  
+  // Relations
+  call      Call     @relation(fields: [callId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  
+  @@map("call_logs")
+}
+
+model Appointment {
+  id              String           @id @default(uuid())
+  userId          String
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  status          String           @default("SCHEDULED") // Using string literal instead of enum
+  location        String?           // Physical or virtual meeting link
+  notes         String?
+  reminderSent  Boolean           @default(false)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  // Relations
+  user          User              @relation(fields: [userId], references: [id])
+  
+  @@map("appointments")
+}
+
+model CRMLog {
+  id            String    @id @default(uuid())
+  callId        String
+  userId        String
+  crmId         String    // ID from Zoho CRM
+  entityType    String    // e.g., "lead", "contact", "deal"
+  action        String    // e.g., "create", "update", "sync"
+  status        String    // e.g., "success", "failed"
+  error         String?   // Error message if status is failed
+  metadata      String?   // JSON string with additional data
+  syncedAt      DateTime  @default(now())
+  
+  // Relations
+  call          Call      @relation(fields: [callId], references: [id])
+  user          User      @relation(fields: [userId], references: [id])
+  
+  @@map("crm_logs")
+}
+
+model SystemSetting {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  value       String
+  description String?
+  isPublic    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@map("system_settings")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("refresh_tokens")
+}

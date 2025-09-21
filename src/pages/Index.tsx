@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { CallData } from "@/types";
 
 // Extend CallData to include UI-specific fields
@@ -75,7 +76,7 @@ const Index = () => {
   // Handle upcomingCalls separately since it might not exist in the context
   const upcomingCalls = 'upcomingCalls' in context ? (context as any).upcomingCalls : [];
   
-  const { hasAccess } = useAuth();
+  const { hasRole } = useAuth();
   
   // Format stats from API
   const formatApiStats = useCallback((stats: any): UICallStats | null => {
@@ -506,11 +507,10 @@ const Index = () => {
             <Label htmlFor="message" className="text-right">
               Message
             </Label>
-            <Input
+            <Textarea
               id="message"
               placeholder="Type your message here"
               className="col-span-3"
-              multiline
               rows={4}
             />
           </div>
